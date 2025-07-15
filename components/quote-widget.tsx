@@ -1,3 +1,14 @@
+type FormData = {
+  Fullname: string;
+  email: string;
+  phone: string;
+  address: string;
+  serviceType: string;
+  squareFootage: string;
+  photos: File[];
+  additionalInfo?: string; // Optional field for additional project details
+};
+
 "use client"
 
 import type React from "react"
@@ -8,24 +19,25 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Upload, Camera, DollarSign, Calendar, CheckCircle, MapPin, Ruler, Leaf } from "lucide-react"
-
-interface FormData {
-  serviceType: string
-  squareFootage: string
-  zipCode: string
-  photos: File[]
-}
+import { Upload, Camera, DollarSign, Calendar, CheckCircle, MapPin, Ruler, Leaf, User, Mail, Phone, HelpCircle } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { supabase } from "@/lib/supabaseClient"
 
 export function QuoteWidget() {
   const [step, setStep] = useState<"form" | "estimate">("form")
   const [isLoading, setIsLoading] = useState(false)
   const [formData, setFormData] = useState<FormData>({
-    serviceType: "",
-    squareFootage: "",
-    zipCode: "",
-    photos: [],
-  })
+  Fullname: "",
+  email: "",
+  phone: "",
+  address: "",
+  serviceType: "",
+  squareFootage: "",
+  photos: [],
+});
+
+const router = useRouter() //
+
   const [estimate, setEstimate] = useState(0)
 
   const serviceTypes = [
@@ -73,19 +85,53 @@ export function QuoteWidget() {
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
+  e.preventDefault();
+  setIsLoading(true);
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+  try {
+    // Submit quote to Supabase
+    const response = await fetch('/api/submit-quote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        Fullname: formData.Fullname,
+        email: formData.email,
+        address: formData.address,
+        phone: formData.phone,
+        service_type: formData.serviceType,
+        description: formData.additionalInfo,
+      }),
+    });
 
-    const calculatedEstimate = calculateEstimate()
-    setEstimate(calculatedEstimate)
-    setStep("estimate")
-    setIsLoading(false)
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error?.message || 'Submission failed');
+    }
+
+    console.log('✅ Quote submitted:', result.data);
+
+    // Calculate and show estimate
+    const calculatedEstimate = calculateEstimate();
+    setEstimate(calculatedEstimate);
+    setStep('estimate');
+  } catch (err) {
+    console.error('❌ Submission error:', err);
+    alert('There was an error submitting your quote.');
+  } finally {
+    setIsLoading(false);
   }
+};
 
-  const isFormValid = formData.serviceType && formData.squareFootage && formData.zipCode && formData.photos.length > 0
+  const isFormValid =
+  formData.Fullname &&
+  formData.email &&
+  formData.phone &&
+  formData.address &&
+  formData.serviceType &&
+  formData.squareFootage &&
+  formData.photos.length > 0;
+
 
   if (step === "estimate") {
     return (
@@ -139,6 +185,7 @@ export function QuoteWidget() {
 
             <div className="space-y-4">
               <Button
+                onClick={() => router.push("/schedule")}
                 className="w-full bg-green-600 hover:bg-green-700 text-white py-4 text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
                 size="lg"
               >
@@ -178,110 +225,174 @@ export function QuoteWidget() {
 
         <CardContent className="p-8">
           <form onSubmit={handleSubmit} className="space-y-8">
-            {/* Service Type */}
-            <div className="space-y-3">
-              <Label htmlFor="service-type" className="text-lg font-semibold text-gray-900 flex items-center">
-                <Leaf className="w-5 h-5 mr-2 text-green-600" />
-                What service do you need?
-              </Label>
-              <Select
-                value={formData.serviceType}
-                onValueChange={(value) => setFormData((prev) => ({ ...prev, serviceType: value }))}
-              >
-                <SelectTrigger className="h-14 text-lg border-2 rounded-xl hover:border-green-300 focus:border-green-500 transition-colors">
-                  <SelectValue placeholder="Choose your landscaping service" />
-                </SelectTrigger>
-                <SelectContent>
-                  {serviceTypes.map((service) => (
-                    <SelectItem key={service.value} value={service.value} className="text-lg py-3">
-                      {service.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {/* FullName */}
+<div className="space-y-3">
+  <Label htmlFor="Fullname" className="text-lg font-semibold text-gray-900 flex items-center">
+    <User className="w-5 h-5 mr-2 text-green-600" />
+    Full Name
+  </Label>
+  <Input
+    id="Fullname"
+    type="text"
+    required
+    value={formData.Fullname}
+    onChange={(e) => setFormData((prev) => ({ ...prev, Fullname: e.target.value }))}
+    className="h-14 text-lg border-2 rounded-xl hover:border-green-300 focus:border-green-500 transition-colors"
+  />
+</div>
 
-            {/* Square Footage */}
-            <div className="space-y-3">
-              <Label htmlFor="square-footage" className="text-lg font-semibold text-gray-900 flex items-center">
-                <Ruler className="w-5 h-5 mr-2 text-green-600" />
-                Estimated square footage
-              </Label>
-              <Input
-                id="square-footage"
-                type="number"
-                placeholder="e.g., 2500"
-                value={formData.squareFootage}
-                onChange={(e) => setFormData((prev) => ({ ...prev, squareFootage: e.target.value }))}
-                className="h-14 text-lg border-2 rounded-xl hover:border-green-300 focus:border-green-500 transition-colors"
-                min="1"
-                max="50000"
-              />
-              <p className="text-sm text-gray-500">Don't know the exact size? Your best estimate is fine!</p>
-            </div>
+{/* Email */}
+<div className="space-y-3">
+  <Label htmlFor="email" className="text-lg font-semibold text-gray-900 flex items-center">
+    <Mail className="w-5 h-5 mr-2 text-green-600" />
+    Email
+  </Label>
+  <Input
+    id="email"
+    type="email"
+    required
+    value={formData.email}
+    onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
+    className="h-14 text-lg border-2 rounded-xl hover:border-green-300 focus:border-green-500 transition-colors"
+  />
+</div>
 
-            {/* ZIP Code */}
-            <div className="space-y-3">
-              <Label htmlFor="zip-code" className="text-lg font-semibold text-gray-900 flex items-center">
-                <MapPin className="w-5 h-5 mr-2 text-green-600" />
-                ZIP code
-              </Label>
-              <Input
-                id="zip-code"
-                type="text"
-                placeholder="e.g., 12345"
-                value={formData.zipCode}
-                onChange={(e) => setFormData((prev) => ({ ...prev, zipCode: e.target.value }))}
-                className="h-14 text-lg border-2 rounded-xl hover:border-green-300 focus:border-green-500 transition-colors"
-                maxLength={5}
-                pattern="[0-9]{5}"
-              />
-            </div>
+{/* Phone */}
+<div className="space-y-3">
+  <Label htmlFor="phone" className="text-lg font-semibold text-gray-900 flex items-center">
+    <Phone className="w-5 h-5 mr-2 text-green-600" />
+    Phone Number
+  </Label>
+  <Input
+    id="phone"
+    type="tel"
+    required
+    value={formData.phone}
+    onChange={(e) => setFormData((prev) => ({ ...prev, phone: e.target.value }))}
+    className="h-14 text-lg border-2 rounded-xl hover:border-green-300 focus:border-green-500 transition-colors"
+  />
+</div>
 
-            {/* Photo Upload */}
-            <div className="space-y-3">
-              <Label className="text-lg font-semibold text-gray-900 flex items-center">
-                <Camera className="w-5 h-5 mr-2 text-green-600" />
-                Upload photos of your yard
-              </Label>
+{/* Address */}
+<div className="space-y-3">
+  <Label htmlFor="address" className="text-lg font-semibold text-gray-900 flex items-center">
+    <MapPin className="w-5 h-5 mr-2 text-green-600" />
+    Street Address
+  </Label>
+  <Input
+    id="address"
+    type="text"
+    required
+    value={formData.address}
+    onChange={(e) => setFormData((prev) => ({ ...prev, address: e.target.value }))}
+    className="h-14 text-lg border-2 rounded-xl hover:border-green-300 focus:border-green-500 transition-colors"
+  />
+</div>
 
-              <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-green-400 transition-colors">
-                <input
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                  id="photo-upload"
-                />
-                <label htmlFor="photo-upload" className="cursor-pointer">
-                  <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-lg text-gray-600 mb-2">Click to upload photos</p>
-                  <p className="text-sm text-gray-500">Upload up to 5 photos (JPG, PNG)</p>
-                </label>
-              </div>
+{/* Service Type */}
+<div className="space-y-3">
+  <Label htmlFor="service-type" className="text-lg font-semibold text-gray-900 flex items-center">
+    <Leaf className="w-5 h-5 mr-2 text-green-600" />
+    What service do you need?
+  </Label>
+  <Select
+    value={formData.serviceType}
+    onValueChange={(value) => setFormData((prev) => ({ ...prev, serviceType: value }))}
+  >
+    <SelectTrigger className="h-14 text-lg border-2 rounded-xl hover:border-green-300 focus:border-green-500 transition-colors">
+      <SelectValue placeholder="Choose your landscaping service" />
+    </SelectTrigger>
+    <SelectContent>
+      {serviceTypes.map((service) => (
+        <SelectItem key={service.value} value={service.value} className="text-lg py-3">
+          {service.label}
+        </SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+</div>
 
-              {formData.photos.length > 0 && (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
-                  {formData.photos.map((photo, index) => (
-                    <div key={index} className="relative group">
-                      <img
-                        src={URL.createObjectURL(photo) || "/placeholder.svg"}
-                        alt={`Upload ${index + 1}`}
-                        className="w-full h-24 object-cover rounded-lg border-2 border-gray-200"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removePhoto(index)}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm hover:bg-red-600 transition-colors"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+{/* Square Footage */}
+<div className="space-y-3">
+  <Label htmlFor="square-footage" className="text-lg font-semibold text-gray-900 flex items-center">
+    <Ruler className="w-5 h-5 mr-2 text-green-600" />
+    Estimated square footage
+  </Label>
+  <Input
+    id="square-footage"
+    type="number"
+    placeholder="e.g., 2500"
+    value={formData.squareFootage}
+    onChange={(e) => setFormData((prev) => ({ ...prev, squareFootage: e.target.value }))}
+    className="h-14 text-lg border-2 rounded-xl hover:border-green-300 focus:border-green-500 transition-colors"
+    min="1"
+    max="50000"
+  />
+  <p className="text-sm text-gray-500">Don't know the exact size? Your best estimate is fine!</p>
+</div>
+
+{/* Photo Upload */}
+<div className="space-y-3">
+  <Label className="text-lg font-semibold text-gray-900 flex items-center">
+    <Camera className="w-5 h-5 mr-2 text-green-600" />
+    Upload photos of your yard
+  </Label>
+
+  <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-green-400 transition-colors">
+    <input
+      type="file"
+      multiple
+      accept="image/*"
+      onChange={handleFileUpload}
+      className="hidden"
+      id="photo-upload"
+    />
+    <label htmlFor="photo-upload" className="cursor-pointer">
+      <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+      <p className="text-lg text-gray-600 mb-2">Click to upload photos</p>
+      <p className="text-sm text-green-600">Upload up to 5 photos (JPG, PNG)</p>
+    </label>
+  </div>
+    </div>
+
+{formData.photos.length > 0 && (
+  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
+    {formData.photos.map((photo, index) => (
+      <div key={index} className="relative group">
+        <img
+          src={URL.createObjectURL(photo)}
+          alt={`Upload ${index + 1}`}
+          className="w-full h-24 object-cover rounded-lg border-2 border-gray-200"
+        />
+        <button
+          type="button"
+          onClick={() => removePhoto(index)}
+          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm hover:bg-red-600 transition-colors"
+        >
+          ×
+        </button>
+      </div>
+    ))}
+  </div>
+)}
+
+{/* Additional Info */}
+<div className="space-y-3">
+  <Label htmlFor="additional-info" className="text-lg font-semibold text-gray-900 flex items-center">
+    <HelpCircle className="w-5 h-5 mr-2 text-green-600" />
+    Additional Project Info (Optional)
+  </Label>
+  <textarea
+    id="additional-info"
+    rows={4}
+    placeholder="Describe any special requirements, access details, or questions you have..."
+    value={formData.additionalInfo || ""}
+    onChange={(e) =>
+      setFormData((prev) => ({ ...prev, additionalInfo: e.target.value }))
+    }
+    className="w-full h-32 p-4 text-lg border-2 rounded-xl hover:border-green-300 focus:border-green-500 transition-colors resize-none"
+  />
+</div>
 
             {/* Submit Button */}
             <Button
