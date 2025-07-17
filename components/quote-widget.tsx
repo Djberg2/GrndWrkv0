@@ -1,3 +1,5 @@
+"use client"
+
 type FormData = {
   Fullname: string;
   email: string;
@@ -9,9 +11,7 @@ type FormData = {
   additionalInfo?: string; // Optional field for additional project details
 };
 
-"use client"
-
-import type React from "react"
+import React from "react"
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -89,49 +89,76 @@ const router = useRouter() //
   setIsLoading(true);
 
   try {
-    // Submit quote to Supabase
-    const response = await fetch('/api/submit-quote', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        Fullname: formData.Fullname,
-        email: formData.email,
-        address: formData.address,
-        phone: formData.phone,
-        service_type: formData.serviceType,
-        description: formData.additionalInfo,
-      }),
-    });
+    // 1. Upload all photos to Supabase via /api/upload-quote-photo
+    const photoUrls: string[] = []
+    for (const file of formData.photos) {
+      const form = new globalThis.FormData()
 
-    const result = await response.json();
+if (!(file instanceof File)) {
+  console.error("🚨 Invalid file type:", file)
+  throw new Error("Invalid file format")
+}
 
-    if (!response.ok) {
-      throw new Error(result.error?.message || 'Submission failed');
+      form.append('file', file)
+
+      const res = await fetch('/api/upload-quote-photo', {
+        method: 'POST',
+        body: form,
+      })
+
+      const data = await res.json()
+
+      console.log("📸 Uploaded file response:", data) 
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Photo upload failed')
+      }
+
+      photoUrls.push(data.path) // Save the photo path to later include in DB
     }
 
-    console.log('✅ Quote submitted:', result.data);
+    // 2. Submit the full quote with form data + uploaded photo paths
+    const response = await fetch('/api/submit-quote', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    name: formData.Fullname,
+    email: formData.email,
+    address: formData.address,
+    phone: formData.phone,
+    service_type: formData.serviceType,
+    description: formData.additionalInfo,
+    photo_urls: photoUrls,
+  }),
+}); // ← Leave this here
 
-    // Calculate and show estimate
-    const calculatedEstimate = calculateEstimate();
-    setEstimate(calculatedEstimate);
-    setStep('estimate');
+const result = await response.json();
+if (!response.ok) {
+  throw new Error(result.error?.message || 'Submission failed');
+}
+
+console.log('✅ Quote submitted:', result.data);
+
+const calculatedEstimate = calculateEstimate();
+setEstimate(calculatedEstimate);
+setStep("estimate");
+
+    setStep("estimate");
   } catch (err) {
-    console.error('❌ Submission error:', err);
-    alert('There was an error submitting your quote.');
+    console.error("❌ Submission error:", err);
+    alert("There was an error submitting your information.");
   } finally {
     setIsLoading(false);
   }
 };
 
   const isFormValid =
-  formData.Fullname &&
-  formData.email &&
-  formData.phone &&
-  formData.address &&
-  formData.serviceType &&
-  formData.squareFootage &&
-  formData.photos.length > 0;
-
+    formData.Fullname &&
+    formData.email &&
+    formData.phone &&
+    formData.address &&
+    formData.serviceType &&
+    formData.squareFootage;
 
   if (step === "estimate") {
     return (

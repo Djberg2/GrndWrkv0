@@ -2,10 +2,10 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { v4 as uuidv4 } from 'uuid'
 
-// Protect environment variables
+// Initialize Supabase server client with environment variables
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // Note: use service role key only in server-side code
+  process.env.SUPABASE_SERVICE_ROLE_KEY! // This stays server-side only
 )
 
 export async function POST(req: Request) {
@@ -16,11 +16,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'No file uploaded' }, { status: 400 })
   }
 
-  const fileName = `${uuidv4()}-${file.name}`
+  const arrayBuffer = await file.arrayBuffer()
+  const buffer = new Uint8Array(arrayBuffer)
+  const cleanName = file.name.replace(/[^\w.-]/g, "_") // Replace invalid chars
+const fileName = `${uuidv4()}-${cleanName}`
 
-  const { error } = await supabase.storage
+  const blob = new Blob([buffer], { type: file.type })  
+
+console.log("Uploading:", fileName, file);
+
+  const { data, error } = await supabase.storage
     .from('quote-photos')
-    .upload(fileName, file, {
+    .upload(fileName, blob, {
+      contentType: file.type,
       cacheControl: '3600',
       upsert: false,
     })
@@ -30,6 +38,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
   }
 
-  // Return the path so you can store it in your quotes table
+  // Return just the file path (we'll store this in the DB)
   return NextResponse.json({ path: fileName })
 }
