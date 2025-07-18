@@ -13,6 +13,7 @@ type QuoteData = {
   square_footage: string
   additional_info: string
   photo_urls: string[]
+  estimate: string
 }
 
 type QuoteContextType = {

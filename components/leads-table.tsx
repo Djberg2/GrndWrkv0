@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { supabase } from "@/lib/supabaseClient"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -9,74 +10,40 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Eye, Calendar, Phone, Mail, MoreHorizontal, ImageIcon } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
+type Lead = {
+  id: number
+  fullname: string
+  email: string
+  phone: string
+  service_type: string
+  square_footage: number
+  estimate: string
+  status: string
+  created_at: string
+  photo_urls: string[]
+  address: string
+}
+
 export function LeadsTable() {
-  const [leads] = useState([
-    {
-      id: 1,
-      name: "Sarah Johnson",
-      email: "sarah@email.com",
-      phone: "(555) 123-4567",
-      service: "Landscaping Design",
-      sqft: "2,500",
-      estimate: "$2,450",
-      status: "New",
-      date: "2024-01-15",
-      photos: 3,
-      address: "123 Oak Street, Springfield",
-    },
-    {
-      id: 2,
-      name: "Mike Chen",
-      email: "mike@email.com",
-      phone: "(555) 234-5678",
-      service: "Lawn Mowing",
-      sqft: "1,200",
-      estimate: "$85",
-      status: "Scheduled",
-      date: "2024-01-14",
-      photos: 2,
-      address: "456 Pine Avenue, Springfield",
-    },
-    {
-      id: 3,
-      name: "Emily Davis",
-      email: "emily@email.com",
-      phone: "(555) 345-6789",
-      service: "Tree Removal",
-      sqft: "800",
-      estimate: "$1,200",
-      status: "Contacted",
-      date: "2024-01-13",
-      photos: 4,
-      address: "789 Maple Drive, Springfield",
-    },
-    {
-      id: 4,
-      name: "Robert Wilson",
-      email: "robert@email.com",
-      phone: "(555) 456-7890",
-      service: "Hardscaping",
-      sqft: "3,200",
-      estimate: "$3,800",
-      status: "Quote Sent",
-      date: "2024-01-12",
-      photos: 6,
-      address: "321 Elm Street, Springfield",
-    },
-    {
-      id: 5,
-      name: "Lisa Anderson",
-      email: "lisa@email.com",
-      phone: "(555) 567-8901",
-      service: "Garden Design",
-      sqft: "1,800",
-      estimate: "$1,650",
-      status: "New",
-      date: "2024-01-11",
-      photos: 5,
-      address: "654 Cedar Lane, Springfield",
-    },
-  ])
+  const [leads, setLeads] = useState<Lead[]>([])
+
+  useEffect(() => {
+    const fetchLeads = async () => {
+      const { data, error } = await supabase
+        .from("quotes")
+        .select("*")
+        .order("created_at", { ascending: false })
+
+      console.log("✅ Supabase leads:", data)
+      console.error("❌ Supabase error:", error)
+
+      if (data) {
+        setLeads(data as Lead[])
+      }
+    }
+
+    fetchLeads()
+  }, [])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -115,14 +82,14 @@ export function LeadsTable() {
                   <div className="flex items-center space-x-3">
                     <Avatar>
                       <AvatarFallback>
-                        {lead.name
+                        {lead.fullname
                           .split(" ")
                           .map((n) => n[0])
                           .join("")}
                       </AvatarFallback>
                     </Avatar>
                     <div>
-                      <div className="font-medium">{lead.name}</div>
+                      <div className="font-medium">{lead.fullname}</div>
                       <div className="text-sm text-gray-500">{lead.email}</div>
                       <div className="text-sm text-gray-500">{lead.phone}</div>
                     </div>
@@ -130,27 +97,32 @@ export function LeadsTable() {
                 </TableCell>
                 <TableCell>
                   <div>
-                    <div className="font-medium">{lead.service}</div>
-                    <div className="text-sm text-gray-500">{lead.sqft} sq ft</div>
+                    <div className="font-medium">{lead.service_type}</div>
+                    <div className="text-sm text-gray-500">{lead.square_footage} sq ft</div>
                   </div>
                 </TableCell>
                 <TableCell>
                   <div className="text-sm">
                     <div className="flex items-center space-x-1 mb-1">
                       <ImageIcon className="w-3 h-3" />
-                      <span>{lead.photos} photos</span>
+                      <span>{lead.photo_urls?.length ?? 0} photos</span>
                     </div>
                     <div className="text-gray-500 max-w-48 truncate">{lead.address}</div>
                   </div>
                 </TableCell>
                 <TableCell>
-                  <div className="font-semibold">{lead.estimate}</div>
+                  <div className="font-semibold">${Number(lead.estimate).toLocaleString()}</div>
+                </TableCell>
+
+                <TableCell>
+                  <Badge className={getStatusColor(lead.status ?? "New")}>
+                    {lead.status ?? "New"}
+                  </Badge>
                 </TableCell>
                 <TableCell>
-                  <Badge className={getStatusColor(lead.status)}>{lead.status}</Badge>
-                </TableCell>
-                <TableCell>
-                  <div className="text-sm">{new Date(lead.date).toLocaleDateString()}</div>
+                  <div className="text-sm">
+                    {new Date(lead.created_at).toLocaleDateString()}
+                  </div>
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end space-x-1">

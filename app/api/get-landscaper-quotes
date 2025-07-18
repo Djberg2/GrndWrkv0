@@ -1,0 +1,17 @@
+// app/api/get-landscaper-quotes/route.ts
+import { NextResponse } from "next/server"
+import { supabase } from "@/lib/supabaseClient"
+
+export async function GET() {
+  const { data, error } = await supabase
+    .from("quotes")
+    .select("*")
+    .order("created_at", { ascending: false })
+
+  if (error) {
+    console.error("❌ Error fetching quotes:", error)
+    return NextResponse.json({ error: "Failed to fetch quotes" }, { status: 500 })
+  }
+
+  return NextResponse.json({ quotes: data })
+}

@@ -53,6 +53,8 @@ export default function SchedulePage() {
   const handleConfirm = async () => {
     if (!selectedDate || !selectedTime || !quoteData) return
 
+    console.log("✅ Final quoteData:", quoteData) // ✅ moved here
+
     try {
       const { error } = await supabase
         .from("quotes")
@@ -68,6 +70,7 @@ export default function SchedulePage() {
           appointment_date: getDateKey(selectedDate),
           appointment_time: selectedTime,
           created_at: new Date().toISOString(),
+          estimate: quoteData.estimate,
         })
         .throwOnError()
 

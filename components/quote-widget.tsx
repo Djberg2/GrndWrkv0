@@ -33,7 +33,7 @@ import {
 } from "lucide-react"
 
 type FormData = {
-  Fullname: string
+  fullname: string
   email: string
   phone: string
   address: string
@@ -47,7 +47,7 @@ export function QuoteWidget() {
   const [step, setStep] = useState<"form" | "estimate">("form")
   const [isLoading, setIsLoading] = useState(false)
   const [formData, setFormData] = useState<FormData>({
-    Fullname: "",
+    fullname: "",
     email: "",
     phone: "",
     address: "",
@@ -56,10 +56,9 @@ export function QuoteWidget() {
     photos: [],
   })
 
+  const [estimate, setEstimate] = useState(0)
   const router = useRouter()
   const { setQuoteData } = useQuoteContext()
-
-  const [estimate, setEstimate] = useState(0)
 
   const serviceTypes = [
     { value: "lawn-mowing", label: "Lawn Mowing & Maintenance", basePrice: 50 },
@@ -74,7 +73,7 @@ export function QuoteWidget() {
     const files = Array.from(event.target.files || [])
     setFormData((prev) => ({
       ...prev,
-      photos: [...prev.photos, ...files].slice(0, 5), // Limit to 5 photos
+      photos: [...prev.photos, ...files].slice(0, 5),
     }))
   }
 
@@ -95,80 +94,68 @@ export function QuoteWidget() {
       service.value === "lawn-mowing"
         ? 0.05
         : service.value === "landscaping"
-          ? 0.15
-          : service.value === "hardscaping"
-            ? 0.25
-            : 0.08
+        ? 0.15
+        : service.value === "hardscaping"
+        ? 0.25
+        : 0.08
 
-    // Add some randomization for realistic estimates
-    const estimate = Math.round((basePrice + sqft * sqftMultiplier) * (0.9 + Math.random() * 0.2))
-    return estimate
+    return Math.round((basePrice + sqft * sqftMultiplier) * (0.9 + Math.random() * 0.2))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setIsLoading(true);
+    e.preventDefault()
+    setIsLoading(true)
 
-  try {
-    // 1. Upload all photos to Supabase via /api/upload-quote-photo
-    const photoUrls: string[] = [];
-    for (const file of formData.photos) {
-      if (!(file instanceof File)) {
-        console.error("🚨 Invalid file type:", file);
-        throw new Error("Invalid file format");
+    try {
+      const photoUrls: string[] = []
+      for (const file of formData.photos) {
+        if (!(file instanceof File)) throw new Error("Invalid file format")
+
+        const form = new FormData()
+        form.append("file", file)
+
+        const res = await fetch("/api/upload-quote-photo", {
+          method: "POST",
+          body: form,
+        })
+
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || "Photo upload failed")
+
+        photoUrls.push(data.path)
       }
 
-      const form = new FormData();
-      form.append('file', file);
+      const calculatedEstimate = calculateEstimate()
+      setEstimate(calculatedEstimate)
 
-      const res = await fetch('/api/upload-quote-photo', {
-        method: 'POST',
-        body: form,
-      });
+      setQuoteData({
+        fullname: formData.fullname,
+        email: formData.email,
+        phone: formData.phone,
+        address: formData.address,
+        service_type: formData.serviceType,
+        square_footage: formData.squareFootage,
+        additional_info: formData.additionalInfo || "",
+        photo_urls: photoUrls,
+        estimate: calculatedEstimate.toString(),
+      })
 
-      const data = await res.json();
-
-      console.log("📸 Uploaded file response:", data);
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Photo upload failed');
-      }
-
-      photoUrls.push(data.path); // Save the photo path to later include in DB
+      setStep("estimate")
+    } catch (err) {
+      console.error("❌ Submission error:", err)
+      alert("There was an error preparing your quote.")
+    } finally {
+      setIsLoading(false)
     }
-
-    // 2. Save the collected data into React context instead of submitting now
-    setQuoteData({
-      fullname: formData.Fullname,
-      email: formData.email,
-      phone: formData.phone,
-      address: formData.address,
-      service_type: formData.serviceType,
-      square_footage: formData.squareFootage,
-      additional_info: formData.additionalInfo || '',
-      photo_urls: photoUrls,
-    });
-
-    // 3. Show the estimate and proceed
-    const calculatedEstimate = calculateEstimate();
-    setEstimate(calculatedEstimate);
-    setStep("estimate");
-
-  } catch (err) {
-    console.error("❌ Submission error:", err);
-    alert("There was an error preparing your quote.");
-  } finally {
-    setIsLoading(false);
   }
-};
 
   const isFormValid =
-    formData.Fullname &&
+    formData.fullname &&
     formData.email &&
     formData.phone &&
     formData.address &&
     formData.serviceType &&
-    formData.squareFootage;
+    formData.squareFootage
 
   if (step === "estimate") {
     return (
@@ -272,8 +259,8 @@ export function QuoteWidget() {
     id="Fullname"
     type="text"
     required
-    value={formData.Fullname}
-    onChange={(e) => setFormData((prev) => ({ ...prev, Fullname: e.target.value }))}
+    value={formData.fullname}
+    onChange={(e) => setFormData((prev) => ({ ...prev, fullname: e.target.value }))}
     className="h-14 text-lg border-2 rounded-xl hover:border-green-300 focus:border-green-500 transition-colors"
   />
 </div>
