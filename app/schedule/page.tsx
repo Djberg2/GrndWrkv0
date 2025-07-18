@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { CalendarDays } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { useQuoteContext } from "@/lib/QuoteContext"
+import { supabase } from "@/lib/supabaseClient"
 
 type UnavailableSlots = {
   [date: string]: string[]
@@ -18,7 +20,9 @@ export default function SchedulePage() {
   const [unavailableSlots, setUnavailableSlots] = useState<UnavailableSlots>({})
   const [message, setMessage] = useState<string | null>(null)
 
-  // Simulate fetching blocked slots from backend
+  const { quoteData } = useQuoteContext()
+  const router = useRouter()
+
   useEffect(() => {
     const fetchBlockedTimes = async () => {
       const mockData: UnavailableSlots = {
@@ -46,29 +50,38 @@ export default function SchedulePage() {
     return slots
   }
 
-  const router = useRouter()
+  const handleConfirm = async () => {
+    if (!selectedDate || !selectedTime || !quoteData) return
 
-const handleConfirm = async () => {
-  if (!selectedDate || !selectedTime) return
-  try {
-    const res = await fetch("/api/schedule-appointment", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        date: getDateKey(selectedDate),
-        time: selectedTime,
-      }),
-    })
+    try {
+      const { error } = await supabase
+        .from("quotes")
+        .insert({
+          fullname: quoteData.fullname,
+          email: quoteData.email,
+          phone: quoteData.phone,
+          address: quoteData.address,
+          service_type: quoteData.service_type,
+          square_footage: quoteData.square_footage,
+          additional_info: quoteData.additional_info,
+          photo_urls: quoteData.photo_urls,
+          appointment_date: getDateKey(selectedDate),
+          appointment_time: selectedTime,
+          created_at: new Date().toISOString(),
+        })
+        .throwOnError()
 
-    if (res.ok) {
-      router.push("/schedule/thank-you")
-    } else {
-      setMessage("❌ Something went wrong.")
+      if (error) {
+        console.error("❌ Supabase insert error:", error)
+        setMessage("❌ Failed to save appointment.")
+      } else {
+        router.push("/schedule/thank-you")
+      }
+    } catch (err) {
+      console.error("❌ Server error:", err)
+      setMessage("❌ Failed to reach server.")
     }
-  } catch (err) {
-    setMessage("❌ Failed to reach server.")
   }
-}
 
   const renderTimeSlots = () => {
     if (!selectedDate) return null

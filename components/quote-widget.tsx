@@ -1,42 +1,63 @@
 "use client"
 
-type FormData = {
-  Fullname: string;
-  email: string;
-  phone: string;
-  address: string;
-  serviceType: string;
-  squareFootage: string;
-  photos: File[];
-  additionalInfo?: string; // Optional field for additional project details
-};
+import React, { useState } from "react"
+import { useRouter } from "next/navigation"
+import { supabase } from "@/lib/supabaseClient"
+import { useQuoteContext } from "@/lib/QuoteContext"
 
-import React from "react"
-
-import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Upload, Camera, DollarSign, Calendar, CheckCircle, MapPin, Ruler, Leaf, User, Mail, Phone, HelpCircle } from "lucide-react"
-import { useRouter } from "next/navigation"
-import { supabase } from "@/lib/supabaseClient"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+
+import {
+  Upload,
+  Camera,
+  DollarSign,
+  Calendar,
+  CheckCircle,
+  MapPin,
+  Ruler,
+  Leaf,
+  User,
+  Mail,
+  Phone,
+  HelpCircle,
+} from "lucide-react"
+
+type FormData = {
+  Fullname: string
+  email: string
+  phone: string
+  address: string
+  serviceType: string
+  squareFootage: string
+  photos: File[]
+  additionalInfo?: string
+}
 
 export function QuoteWidget() {
   const [step, setStep] = useState<"form" | "estimate">("form")
   const [isLoading, setIsLoading] = useState(false)
   const [formData, setFormData] = useState<FormData>({
-  Fullname: "",
-  email: "",
-  phone: "",
-  address: "",
-  serviceType: "",
-  squareFootage: "",
-  photos: [],
-});
+    Fullname: "",
+    email: "",
+    phone: "",
+    address: "",
+    serviceType: "",
+    squareFootage: "",
+    photos: [],
+  })
 
-const router = useRouter() //
+  const router = useRouter()
+  const { setQuoteData } = useQuoteContext()
 
   const [estimate, setEstimate] = useState(0)
 
@@ -90,63 +111,52 @@ const router = useRouter() //
 
   try {
     // 1. Upload all photos to Supabase via /api/upload-quote-photo
-    const photoUrls: string[] = []
+    const photoUrls: string[] = [];
     for (const file of formData.photos) {
-      const form = new globalThis.FormData()
+      if (!(file instanceof File)) {
+        console.error("🚨 Invalid file type:", file);
+        throw new Error("Invalid file format");
+      }
 
-if (!(file instanceof File)) {
-  console.error("🚨 Invalid file type:", file)
-  throw new Error("Invalid file format")
-}
-
-      form.append('file', file)
+      const form = new FormData();
+      form.append('file', file);
 
       const res = await fetch('/api/upload-quote-photo', {
         method: 'POST',
         body: form,
-      })
+      });
 
-      const data = await res.json()
+      const data = await res.json();
 
-      console.log("📸 Uploaded file response:", data) 
+      console.log("📸 Uploaded file response:", data);
 
       if (!res.ok) {
-        throw new Error(data.error || 'Photo upload failed')
+        throw new Error(data.error || 'Photo upload failed');
       }
 
-      photoUrls.push(data.path) // Save the photo path to later include in DB
+      photoUrls.push(data.path); // Save the photo path to later include in DB
     }
 
-    // 2. Submit the full quote with form data + uploaded photo paths
-    const response = await fetch('/api/submit-quote', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    name: formData.Fullname,
-    email: formData.email,
-    address: formData.address,
-    phone: formData.phone,
-    service_type: formData.serviceType,
-    description: formData.additionalInfo,
-    photo_urls: photoUrls,
-  }),
-}); // ← Leave this here
+    // 2. Save the collected data into React context instead of submitting now
+    setQuoteData({
+      fullname: formData.Fullname,
+      email: formData.email,
+      phone: formData.phone,
+      address: formData.address,
+      service_type: formData.serviceType,
+      square_footage: formData.squareFootage,
+      additional_info: formData.additionalInfo || '',
+      photo_urls: photoUrls,
+    });
 
-const result = await response.json();
-if (!response.ok) {
-  throw new Error(result.error?.message || 'Submission failed');
-}
-
-console.log('✅ Quote submitted:', result.data);
-
-const calculatedEstimate = calculateEstimate();
-setEstimate(calculatedEstimate);
-setStep("estimate");
-
+    // 3. Show the estimate and proceed
+    const calculatedEstimate = calculateEstimate();
+    setEstimate(calculatedEstimate);
     setStep("estimate");
+
   } catch (err) {
     console.error("❌ Submission error:", err);
-    alert("There was an error submitting your information.");
+    alert("There was an error preparing your quote.");
   } finally {
     setIsLoading(false);
   }
