@@ -20,6 +20,7 @@ import { usePathname } from "next/navigation"
 const navigation = [
   { name: "Overview", href: "/dashboard", icon: Home },
   { name: "Leads & Quotes", href: "/dashboard/leads", icon: Users },
+  { name: "Inbox", href: "/dashboard/inbox", icon: Bell }, // 👈 NEW
   { name: "Calendar", href: "/dashboard/calendar", icon: Calendar },
   { name: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
