@@ -1,24 +1,99 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { format } from "date-fns"
+
+interface DayAvailability {
+  name: string
+  enabled: boolean
+  start: string
+  end: string
+  lunch: string
+}
+
+interface BlockedDate {
+  label: string
+  date: string
+}
+
+interface AvailabilitySettingsType {
+  bookingWindow: string
+  minNotice: string
+  quoteDuration: string
+  bufferTime: string
+  days: DayAvailability[]
+  blockedDates: BlockedDate[]
+}
 
 export function AvailabilitySettings() {
-  const days = [
-    { name: "Monday", enabled: true },
-    { name: "Tuesday", enabled: true },
-    { name: "Wednesday", enabled: true },
-    { name: "Thursday", enabled: true },
-    { name: "Friday", enabled: true },
-    { name: "Saturday", enabled: true },
-    { name: "Sunday", enabled: false },
-  ]
+  const [availability, setAvailability] = useState<AvailabilitySettingsType>(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("availabilitySettings")
+      return stored
+        ? JSON.parse(stored)
+        : {
+            bookingWindow: "30",
+            minNotice: "24",
+            quoteDuration: "60",
+            bufferTime: "15",
+            days: [
+              { name: "Monday", enabled: true, start: "8", end: "17", lunch: "12-13" },
+              { name: "Tuesday", enabled: true, start: "8", end: "17", lunch: "12-13" },
+              { name: "Wednesday", enabled: true, start: "8", end: "17", lunch: "12-13" },
+              { name: "Thursday", enabled: true, start: "8", end: "17", lunch: "12-13" },
+              { name: "Friday", enabled: true, start: "8", end: "17", lunch: "12-13" },
+              { name: "Saturday", enabled: true, start: "8", end: "14", lunch: "12-13" },
+              { name: "Sunday", enabled: false, start: "8", end: "14", lunch: "12-13" },
+            ],
+            blockedDates: [],
+          }
+    }
+    return {
+      bookingWindow: "30",
+      minNotice: "24",
+      quoteDuration: "60",
+      bufferTime: "15",
+      days: [],
+      blockedDates: [],
+    }
+  })
+
+  const updateField = (field: keyof AvailabilitySettingsType, value: any) => {
+    setAvailability((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const updateDay = <K extends keyof DayAvailability>(index: number, key: K, value: DayAvailability[K]) => {
+    const updatedDays = [...availability.days]
+    updatedDays[index][key] = value
+    setAvailability({ ...availability, days: updatedDays })
+  }
+
+  const addBlockedDate = () => {
+    const newDate = prompt("Enter blocked date (YYYY-MM-DD):")
+    if (!newDate) return
+    const label = prompt("Enter reason or label for this block:") || "Blocked Date"
+    const updated = [...availability.blockedDates, { label, date: newDate }]
+    setAvailability({ ...availability, blockedDates: updated })
+  }
+
+  const removeBlockedDate = (indexToRemove: number) => {
+    const updated = availability.blockedDates.filter((_, i) => i !== indexToRemove)
+    setAvailability({ ...availability, blockedDates: updated })
+  }
+
+  const handleSave = () => {
+    localStorage.setItem("availabilitySettings", JSON.stringify(availability))
+    window.dispatchEvent(new Event("storage"))
+  }
 
   return (
     <div className="space-y-6">
-      {/* General Availability */}
       <Card>
         <CardHeader>
           <CardTitle>General Availability</CardTitle>
@@ -27,7 +102,7 @@ export function AvailabilitySettings() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="booking-window">Booking Window (days ahead)</Label>
-              <Select defaultValue="30">
+              <Select value={availability.bookingWindow} onValueChange={(val) => updateField("bookingWindow", val)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -41,7 +116,7 @@ export function AvailabilitySettings() {
             </div>
             <div>
               <Label htmlFor="min-notice">Minimum Notice (hours)</Label>
-              <Select defaultValue="24">
+              <Select value={availability.minNotice} onValueChange={(val) => updateField("minNotice", val)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -59,7 +134,7 @@ export function AvailabilitySettings() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="quote-duration">Default Quote Duration</Label>
-              <Select defaultValue="60">
+              <Select value={availability.quoteDuration} onValueChange={(val) => updateField("quoteDuration", val)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -73,7 +148,7 @@ export function AvailabilitySettings() {
             </div>
             <div>
               <Label htmlFor="buffer-time">Buffer Time Between Appointments</Label>
-              <Select defaultValue="15">
+              <Select value={availability.bufferTime} onValueChange={(val) => updateField("bufferTime", val)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -89,58 +164,50 @@ export function AvailabilitySettings() {
         </CardContent>
       </Card>
 
-      {/* Weekly Schedule */}
       <Card>
         <CardHeader>
           <CardTitle>Weekly Schedule</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {days.map((day, index) => (
+          {availability.days.map((day, index) => (
             <div key={day.name}>
               {index > 0 && <Separator className="my-4" />}
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-4">
-                  <Switch defaultChecked={day.enabled} />
+                  <Switch checked={day.enabled} onCheckedChange={(val) => updateDay(index, "enabled", val)} />
                   <Label className="w-24 font-medium">{day.name}</Label>
                 </div>
-
                 {day.enabled && (
                   <div className="flex items-center space-x-4">
                     <div className="flex items-center space-x-2">
                       <Label className="text-sm">Start:</Label>
-                      <Select defaultValue="8">
+                      <Select value={day.start} onValueChange={(val) => updateDay(index, "start", val)}>
                         <SelectTrigger className="w-20">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           {Array.from({ length: 12 }, (_, i) => i + 6).map((hour) => (
-                            <SelectItem key={hour} value={hour.toString()}>
-                              {hour}:00
-                            </SelectItem>
+                            <SelectItem key={hour} value={hour.toString()}>{hour}:00</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
-
                     <div className="flex items-center space-x-2">
                       <Label className="text-sm">End:</Label>
-                      <Select defaultValue="17">
+                      <Select value={day.end} onValueChange={(val) => updateDay(index, "end", val)}>
                         <SelectTrigger className="w-20">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           {Array.from({ length: 12 }, (_, i) => i + 12).map((hour) => (
-                            <SelectItem key={hour} value={hour.toString()}>
-                              {hour}:00
-                            </SelectItem>
+                            <SelectItem key={hour} value={hour.toString()}>{hour}:00</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
-
                     <div className="flex items-center space-x-2">
                       <Label className="text-sm">Lunch:</Label>
-                      <Select defaultValue="12-13">
+                      <Select value={day.lunch} onValueChange={(val) => updateDay(index, "lunch", val)}>
                         <SelectTrigger className="w-24">
                           <SelectValue />
                         </SelectTrigger>
@@ -159,40 +226,31 @@ export function AvailabilitySettings() {
         </CardContent>
       </Card>
 
-      {/* Blocked Dates */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Blocked Dates</CardTitle>
-          <Button size="sm">Add Blocked Date</Button>
+          <Button size="sm" onClick={addBlockedDate}>Add Blocked Date</Button>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 border rounded-lg">
-              <div>
-                <div className="font-medium">Holiday Break</div>
-                <div className="text-sm text-gray-500">December 24, 2024 - January 2, 2025</div>
+            {availability.blockedDates.map((block, index) => (
+              <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                <div>
+                  <div className="font-medium">{block.label}</div>
+                  <div className="text-sm text-gray-500">{format(new Date(block.date), "MMMM d, yyyy")}</div>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => removeBlockedDate(index)}>Remove</Button>
               </div>
-              <Button variant="outline" size="sm">
-                Remove
-              </Button>
-            </div>
-
-            <div className="flex items-center justify-between p-3 border rounded-lg">
-              <div>
-                <div className="font-medium">Equipment Maintenance</div>
-                <div className="text-sm text-gray-500">March 15, 2024</div>
-              </div>
-              <Button variant="outline" size="sm">
-                Remove
-              </Button>
-            </div>
+            ))}
+            {availability.blockedDates.length === 0 && (
+              <div className="text-gray-500 text-sm">No blocked dates added yet.</div>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Save Button */}
       <div className="flex justify-end">
-        <Button className="bg-green-600 hover:bg-green-700">Save Availability Settings</Button>
+        <Button className="bg-green-600 hover:bg-green-700" onClick={handleSave}>Save Availability Settings</Button>
       </div>
     </div>
   )

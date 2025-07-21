@@ -8,10 +8,19 @@ import { cn } from "@/lib/utils"
 import { CalendarDays } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useQuoteContext } from "@/lib/QuoteContext"
-import { supabase } from "@/lib/supabaseClient"
 
 type UnavailableSlots = {
   [date: string]: string[]
+}
+
+function convertTo24Hour(timeStr: string): string {
+  const [time, meridian] = timeStr.split(" ")
+  let [hours, minutes] = time.split(":").map(Number)
+
+  if (meridian === "PM" && hours !== 12) hours += 12
+  if (meridian === "AM" && hours === 12) hours = 0
+
+  return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`
 }
 
 export default function SchedulePage() {
@@ -53,33 +62,36 @@ export default function SchedulePage() {
   const handleConfirm = async () => {
     if (!selectedDate || !selectedTime || !quoteData) return
 
-    console.log("✅ Final quoteData:", quoteData) // ✅ moved here
-
     try {
-      const { error } = await supabase
-        .from("quotes")
-        .insert({
-          fullname: quoteData.fullname,
-          email: quoteData.email,
-          phone: quoteData.phone,
-          address: quoteData.address,
-          service_type: quoteData.service_type,
-          square_footage: quoteData.square_footage,
-          additional_info: quoteData.additional_info,
-          photo_urls: quoteData.photo_urls,
-          appointment_date: getDateKey(selectedDate),
-          appointment_time: selectedTime,
-          created_at: new Date().toISOString(),
-          estimate: quoteData.estimate,
-        })
-        .throwOnError()
-
-      if (error) {
-        console.error("❌ Supabase insert error:", error)
-        setMessage("❌ Failed to save appointment.")
-      } else {
-        router.push("/schedule/thank-you")
+      const payload = {
+        name: quoteData.fullname,
+        email: quoteData.email,
+        phone: quoteData.phone,
+        address: quoteData.address,
+        serviceType: quoteData.service_type,
+        squareFootage: quoteData.square_footage,
+        additionalInfo: quoteData.additional_info,
+        photos: quoteData.photo_urls,
+        estimate: quoteData.estimate,
+        scheduledDateTime: new Date(
+          `${getDateKey(selectedDate)}T${convertTo24Hour(selectedTime)}`
+        ).toISOString(),
       }
+console.log("📦 Payload being submitted:", payload)
+      setMessage("⏳ Scheduling your appointment...")
+      const res = await fetch("/api/schedule-appointment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error?.message || "Unknown error")
+      }
+
+      router.push("/schedule/thank-you")
     } catch (err) {
       console.error("❌ Server error:", err)
       setMessage("❌ Failed to reach server.")
@@ -130,7 +142,6 @@ export default function SchedulePage() {
         </CardHeader>
 
         <CardContent className="p-8 space-y-6">
-          {/* Calendar */}
           <div className="flex justify-center">
             <Calendar
               mode="single"
@@ -150,10 +161,8 @@ export default function SchedulePage() {
             />
           </div>
 
-          {/* Time Slots */}
           {renderTimeSlots()}
 
-          {/* Confirmation */}
           {selectedDate && selectedTime && (
             <div className="text-center space-y-4">
               <p className="text-lg font-medium text-gray-700">

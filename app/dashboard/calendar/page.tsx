@@ -1,5 +1,5 @@
 import { DashboardLayout } from "@/components/dashboard-layout"
-import { CalendarView } from "@/components/calendar-view"
+import CalendarView from "@/components/calendar-view"
 import { AvailabilitySettings } from "@/components/availability-settings"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
