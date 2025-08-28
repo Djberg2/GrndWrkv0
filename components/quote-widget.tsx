@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
 import { useQuoteContext } from "@/lib/QuoteContext"
@@ -57,10 +57,13 @@ export function QuoteWidget() {
   })
 
   const [estimate, setEstimate] = useState(0)
+  type PricingService = { name: string; basePrice: number; pricePerSqft: number; markup: number }
+  const [pricingMap, setPricingMap] = useState<Record<string, PricingService>>({})
   const router = useRouter()
   const { setQuoteData } = useQuoteContext()
 
-  const serviceTypes = [
+  // Fallback services if pricing settings are not configured yet
+  const fallbackServices = [
     { value: "lawn-mowing", label: "Lawn Mowing & Maintenance", basePrice: 50 },
     { value: "landscaping", label: "Landscaping Design", basePrice: 200 },
     { value: "tree-removal", label: "Tree Removal", basePrice: 300 },
@@ -68,6 +71,40 @@ export function QuoteWidget() {
     { value: "garden-design", label: "Garden Design & Planting", basePrice: 150 },
     { value: "irrigation", label: "Irrigation Systems", basePrice: 250 },
   ]
+
+  // Build service options from pricing settings when available
+  const serviceOptions = Object.keys(pricingMap).length
+    ? Object.entries(pricingMap).map(([value, svc]) => ({ value, label: svc.name }))
+    : fallbackServices
+
+  // Load pricing settings from Supabase (public.settings key='pricing')
+  useEffect(() => {
+    const loadPricing = async () => {
+      const { data } = await supabase
+        .from("settings")
+        .select("data")
+        .eq("key", "pricing")
+        .single()
+      const map: Record<string, PricingService> = {}
+      const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
+      if (data?.data?.services) {
+        try {
+          for (const s of data.data.services as PricingService[]) {
+            if (!s?.name) continue
+            const key = slugify(s.name)
+            map[key] = {
+              name: s.name,
+              basePrice: Number(s.basePrice) || 0,
+              pricePerSqft: Number(s.pricePerSqft) || 0,
+              markup: Number(s.markup) || 0,
+            }
+          }
+        } catch {}
+      }
+      setPricingMap(map)
+    }
+    loadPricing()
+  }, [])
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || [])
@@ -84,22 +121,40 @@ export function QuoteWidget() {
     }))
   }
 
+  const parseSqft = (val: string) => {
+    const n = Number.parseInt(val.replace(/\D/g, ""), 10)
+    return Number.isFinite(n) && n > 0 ? n : 0
+  }
+
   const calculateEstimate = () => {
-    const service = serviceTypes.find((s) => s.value === formData.serviceType)
-    if (!service) return 0
+    const alias: Record<string, string> = { landscaping: "landscaping-design" }
+    const key = pricingMap[formData.serviceType]
+      ? formData.serviceType
+      : alias[formData.serviceType] && pricingMap[alias[formData.serviceType]]
+      ? alias[formData.serviceType]
+      : formData.serviceType
 
-    const sqft = Number.parseInt(formData.squareFootage) || 1000
-    const basePrice = service.basePrice
-    const sqftMultiplier =
-      service.value === "lawn-mowing"
-        ? 0.05
-        : service.value === "landscaping"
-        ? 0.15
-        : service.value === "hardscaping"
-        ? 0.25
-        : 0.08
+    const svc = pricingMap[key]
+    const sqft = parseSqft(formData.squareFootage)
 
-    return Math.round((basePrice + sqft * sqftMultiplier) * (0.9 + Math.random() * 0.2))
+    if (svc) {
+      const subtotal = (svc.basePrice || 0) + sqft * (svc.pricePerSqft || 0)
+      const withMarkup = subtotal * (1 + (svc.markup || 0) / 100)
+      return Math.max(0, Math.round(withMarkup))
+    }
+
+    // Fallback heuristics if pricing isn't configured
+    const fallbackMultipliers: Record<string, number> = {
+      "lawn-mowing": 0.05,
+      "landscaping": 0.15,
+      "tree-removal": 0.08,
+      "hardscaping": 0.25,
+      "garden-design": 0.12,
+      "irrigation": 0.18,
+    }
+    const base = fallbackServices.find((s) => s.value === formData.serviceType)?.basePrice || 0
+    const mult = fallbackMultipliers[formData.serviceType] ?? 0.1
+    return Math.max(0, Math.round(base + sqft * mult))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -122,7 +177,8 @@ export function QuoteWidget() {
         const data = await res.json()
         if (!res.ok) throw new Error(data.error || "Photo upload failed")
 
-        photoUrls.push(data.path)
+        const fileUrl = data.publicUrl || data.path
+        photoUrls.push(fileUrl)
       }
 
       const calculatedEstimate = calculateEstimate()
@@ -150,12 +206,12 @@ export function QuoteWidget() {
   }
 
   const isFormValid =
-    formData.fullname &&
+    Boolean(formData.fullname &&
     formData.email &&
     formData.phone &&
     formData.address &&
     formData.serviceType &&
-    formData.squareFootage
+    parseSqft(formData.squareFootage) > 0)
 
   if (step === "estimate") {
     return (
@@ -327,7 +383,7 @@ export function QuoteWidget() {
       <SelectValue placeholder="Choose your landscaping service" />
     </SelectTrigger>
     <SelectContent>
-      {serviceTypes.map((service) => (
+      {serviceOptions.map((service) => (
         <SelectItem key={service.value} value={service.value} className="text-lg py-3">
           {service.label}
         </SelectItem>
@@ -344,13 +400,18 @@ export function QuoteWidget() {
   </Label>
   <Input
     id="square-footage"
-    type="number"
-    placeholder="e.g., 2500"
+    type="text"
+    inputMode="numeric"
+    pattern="[0-9,\.\s]*"
+    placeholder="e.g., 2,500"
     value={formData.squareFootage}
-    onChange={(e) => setFormData((prev) => ({ ...prev, squareFootage: e.target.value }))}
+    onChange={(e) => {
+      const raw = e.target.value
+      // Allow users to type commas/spaces; store only digits
+      const digitsOnly = raw.replace(/\D/g, "")
+      setFormData((prev) => ({ ...prev, squareFootage: digitsOnly }))
+    }}
     className="h-14 text-lg border-2 rounded-xl hover:border-green-300 focus:border-green-500 transition-colors"
-    min="1"
-    max="50000"
   />
   <p className="text-sm text-gray-500">Don't know the exact size? Your best estimate is fine!</p>
 </div>

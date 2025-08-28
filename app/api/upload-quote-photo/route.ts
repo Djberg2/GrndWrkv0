@@ -23,7 +23,10 @@ const fileName = `${uuidv4()}-${cleanName}`
 
   const blob = new Blob([buffer], { type: file.type })  
 
-console.log("Uploading:", fileName, file);
+if (process.env.NODE_ENV !== 'production') {
+  // Avoid logging large file buffers in production
+  console.log("Uploading:", fileName)
+}
 
   const { data, error } = await supabase.storage
     .from('quote-photos')
@@ -38,6 +41,9 @@ console.log("Uploading:", fileName, file);
     return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
   }
 
-  // Return just the file path (we'll store this in the DB)
-  return NextResponse.json({ path: fileName })
+  // Build public URL
+  const { data: pub } = supabase.storage.from('quote-photos').getPublicUrl(fileName)
+
+  // Return file path and public URL
+  return NextResponse.json({ path: fileName, publicUrl: pub.publicUrl })
 }

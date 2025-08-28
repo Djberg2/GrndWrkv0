@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
+import { useServiceColors, labelService, slugService } from "@/hooks/use-service-colors"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -13,12 +14,7 @@ const VIEWS = {
   MONTH: "month",
 } as const
 
-const SERVICE_COLORS: Record<string, string> = {
-  "lawn-mowing": "bg-green-100 text-green-800",
-  "tree-removal": "bg-red-100 text-red-800",
-  "landscaping-design": "bg-blue-100 text-blue-800",
-  "default": "bg-gray-200 text-gray-800",
-}
+const DEFAULT_CHIP = "bg-gray-200 text-gray-800"
 
 type Lead = {
   id: number
@@ -36,6 +32,7 @@ export default function CalendarView() {
   const [view, setView] = useState<"week" | "month">("month")
   const [today, setToday] = useState(new Date())
   const [selectedAppointment, setSelectedAppointment] = useState<Lead | null>(null)
+  const { serviceColors, get } = useServiceColors()
 
   useEffect(() => {
     const fetchAppointments = async () => {
@@ -50,6 +47,8 @@ export default function CalendarView() {
 
     fetchAppointments()
   }, [])
+
+  // colors are loaded via useServiceColors
 
   const getAppointmentsByDate = (date: Date) => {
     return leads.filter((lead) => {
@@ -75,14 +74,15 @@ export default function CalendarView() {
           {format(date, "EEE MMM d")}
         </div>
         {appointments.map((appt) => {
-          const color = SERVICE_COLORS[appt.service_type] || SERVICE_COLORS.default
+          const key = slugService(appt.service_type)
+          const color = get(appt.service_type)?.chip || DEFAULT_CHIP
           return (
             <div
               key={appt.id}
               className={`text-xs truncate px-1 py-0.5 rounded mb-1 cursor-pointer shadow ${color}`}
               onClick={() => setSelectedAppointment(appt)}
             >
-              • {appt.fullname} ({appt.service_type.replace(/-/g, " ")})
+              • {appt.fullname} ({labelService(key)})
             </div>
           )
         })}
@@ -138,14 +138,15 @@ export default function CalendarView() {
                     {appointments.map((appt) => {
                       const [apptHour] = appt.appointment_time?.split(":" ) || []
                       if (Number(apptHour) !== hour) return null
-                      const color = SERVICE_COLORS[appt.service_type] || SERVICE_COLORS.default
+                      const key = slugService(appt.service_type)
+                      const color = get(appt.service_type)?.chip || DEFAULT_CHIP
                       return (
                         <div
                           key={appt.id}
                           className={`absolute inset-1 rounded px-2 py-1 text-xs shadow ${color} cursor-pointer`}
                           onClick={() => setSelectedAppointment(appt)}
                         >
-                          {appt.fullname} - {appt.service_type.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase())}
+                          {appt.fullname} - {labelService(key)}
                         </div>
                       )
                     })}
@@ -179,6 +180,11 @@ export default function CalendarView() {
               <Button variant={view === VIEWS.WEEK ? "default" : "outline"} onClick={() => setView("week")}>Week</Button>
               <Button variant={view === VIEWS.MONTH ? "default" : "outline"} onClick={() => setView("month")}>Month</Button>
             </div>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs text-gray-700 dark:text-gray-300">
+            {Object.entries(serviceColors).map(([k, entry]) => (
+              <span key={k} className={`px-2 py-0.5 rounded shadow-sm ${entry.chip}`}>{labelService(k)}</span>
+            ))}
           </div>
           {view === VIEWS.WEEK ? renderWeekView() : renderMonthView()}
         </CardContent>

@@ -4,7 +4,9 @@ import { supabase } from "@/lib/supabaseClient"
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    console.log("✅ Appointment request:", body)
+    if (process.env.NODE_ENV !== "production") {
+      console.log("✅ Appointment request:", body)
+    }
 
     const {
       name,

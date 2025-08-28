@@ -77,7 +77,9 @@ export default function SchedulePage() {
           `${getDateKey(selectedDate)}T${convertTo24Hour(selectedTime)}`
         ).toISOString(),
       }
-console.log("📦 Payload being submitted:", payload)
+      if (process.env.NODE_ENV !== "production") {
+        console.log("📦 Payload being submitted:", payload)
+      }
       setMessage("⏳ Scheduling your appointment...")
       const res = await fetch("/api/schedule-appointment", {
         method: "POST",

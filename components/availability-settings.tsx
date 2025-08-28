@@ -64,7 +64,10 @@ export function AvailabilitySettings() {
     }
   })
 
-  const updateField = (field: keyof AvailabilitySettingsType, value: any) => {
+  const updateField = <K extends keyof AvailabilitySettingsType>(
+    field: K,
+    value: AvailabilitySettingsType[K]
+  ) => {
     setAvailability((prev) => ({ ...prev, [field]: value }))
   }
 

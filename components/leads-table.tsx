@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { supabase } from "@/lib/supabaseClient"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -18,9 +17,12 @@ import {
   Eye,
   ImageIcon
 } from "lucide-react"
+import { toast } from "@/hooks/use-toast"
+import { supabase } from "@/lib/supabaseClient"
+import { useServiceColors, slugService, labelService } from "@/hooks/use-service-colors"
 
 // Updated Lead type with additional_info field
-type Lead = {
+export type Lead = {
   id: number
   fullname: string
   email: string
@@ -36,24 +38,22 @@ type Lead = {
   address: string
   notes?: string
   additional_info?: string
+  assigned_to?: string | null
 }
 
-export function LeadsTable() {
-  const [leads, setLeads] = useState<Lead[]>([])
+type User = { id: string; fullname: string }
+
+type LeadsTableProps = {
+  leads: Lead[]
+  users: User[]
+  onChangeStatus: (id: number, newStatus: string) => Promise<void> | void
+  onChangeNotes: (id: number, notes: string) => Promise<void> | void
+  onAssign: (id: number, userId: string) => Promise<void> | void
+}
+
+export function LeadsTable({ leads, users, onChangeStatus, onChangeNotes, onAssign }: LeadsTableProps) {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
-
-  useEffect(() => {
-    const fetchLeads = async () => {
-      const { data, error } = await supabase
-        .from("quotes")
-        .select("*")
-        .order("created_at", { ascending: false })
-
-      if (data) setLeads(data as Lead[])
-      if (error) console.error("❌ Supabase error:", error)
-    }
-    fetchLeads()
-  }, [])
+  const { get } = useServiceColors()
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -97,27 +97,41 @@ export function LeadsTable() {
   }
 
   const handleStatusChange = async (id: number, newStatus: string) => {
-    const { error } = await supabase
-      .from("quotes")
-      .update({ status: newStatus })
-      .eq("id", id)
-
-    if (!error) {
-      setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, status: newStatus } : l)))
+    try {
+      await onChangeStatus(id, newStatus)
       if (selectedLead?.id === id) setSelectedLead({ ...selectedLead, status: newStatus })
+      toast({ title: "Status updated", description: `Lead marked as ${newStatus}.` })
+    } catch (error: any) {
+      toast({ title: "Failed to update status", description: String(error?.message || error), variant: "destructive" })
     }
   }
 
   const handleNotesUpdate = async (id: number, newNotes: string) => {
-    const { error } = await supabase
-      .from("quotes")
-      .update({ notes: newNotes })
-      .eq("id", id)
-
-    if (!error) {
-      setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, notes: newNotes } : l)))
+    try {
+      await onChangeNotes(id, newNotes)
       if (selectedLead?.id === id) setSelectedLead({ ...selectedLead, notes: newNotes })
+      toast({ title: "Notes saved" })
+    } catch (error: any) {
+      toast({ title: "Failed to save notes", description: String(error?.message || error), variant: "destructive" })
     }
+  }
+
+  const handleAssign = async (id: number, userId: string) => {
+    try {
+      await onAssign(id, userId)
+      const assignedValue = userId === "unassigned" ? null : userId
+      if (selectedLead?.id === id) setSelectedLead({ ...selectedLead, assigned_to: assignedValue })
+      const label = assignedValue ? users.find(u => u.id === assignedValue)?.fullname ?? assignedValue : "Unassigned"
+      toast({ title: "Estimator updated", description: `Assigned: ${label}` })
+    } catch (error: any) {
+      toast({ title: "Failed to assign estimator", description: String(error?.message || error), variant: "destructive" })
+    }
+  }
+
+  const resolvePhotoUrl = (p: string) => {
+    if (!p) return p
+    if (/^https?:\/\//i.test(p)) return p
+    return supabase.storage.from('quote-photos').getPublicUrl(p).data.publicUrl
   }
 
   return (
@@ -161,7 +175,9 @@ export function LeadsTable() {
                 <TableCell>
                   <div>
                     <div className="font-medium">
-                      {lead.service_type.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                      <span className={`inline-block px-2 py-0.5 rounded shadow-sm ${get(lead.service_type).chip}`}>
+                        {lead.service_type.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                      </span>
                     </div>
                     <div className="text-sm text-gray-500">{lead.square_footage} sq ft</div>
                   </div>
@@ -201,19 +217,19 @@ export function LeadsTable() {
         </Table>
 
         {selectedLead && (
-          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-            <div className="bg-white dark:bg-gray-900 rounded-xl p-6 shadow-xl w-full max-w-md">
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+            <div className="relative bg-white dark:bg-gray-900 rounded-xl p-6 shadow-xl w-full max-w-2xl max-h-[85vh] overflow-y-auto">
               <h2 className="text-2xl font-bold mb-4">Lead Details</h2>
-              <div className="space-y-2 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                 <p><strong>Name:</strong> {selectedLead.fullname}</p>
                 <p><strong>Email:</strong> {selectedLead.email}</p>
                 <p><strong>Phone:</strong> {selectedLead.phone}</p>
-                <p><strong>Address:</strong> {selectedLead.address}</p>
+                <p className="sm:col-span-2"><strong>Address:</strong> {selectedLead.address}</p>
                 <p><strong>Service Type:</strong> {selectedLead.service_type}</p>
                 <p><strong>Square Footage:</strong> {selectedLead.square_footage}</p>
                 <p><strong>Estimate:</strong> ${Number(selectedLead.estimate).toLocaleString()}</p>
                 <p><strong>Created:</strong> {new Date(selectedLead.created_at).toLocaleDateString("en-US")}</p>
-                <p><strong>Appointment:</strong> {formatAppointment(selectedLead.appointment_date, selectedLead.appointment_time, true)}</p>
+                <p className="sm:col-span-2"><strong>Appointment:</strong> {formatAppointment(selectedLead.appointment_date, selectedLead.appointment_time, true)}</p>
               </div>
 
               <div className="mt-4">
@@ -230,16 +246,30 @@ export function LeadsTable() {
                 </select>
               </div>
 
+              <div className="mt-4">
+                <label className="block text-sm font-medium mb-1">Assign Estimator:</label>
+                <select
+                  value={selectedLead.assigned_to ?? "unassigned"}
+                  onChange={(e) => handleAssign(selectedLead.id, e.target.value)}
+                  className="w-full border border-gray-300 dark:border-gray-700 rounded p-2 bg-white dark:bg-gray-800"
+                >
+                  <option value="unassigned">Unassigned</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>{u.fullname}</option>
+                  ))}
+                </select>
+              </div>
+
               {selectedLead.photo_urls?.length > 0 && (
                 <div className="mt-4">
                   <p className="font-semibold mb-1">Uploaded Photos:</p>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {selectedLead.photo_urls.map((url, idx) => (
                       <img
                         key={idx}
-                        src={url}
+                        src={resolvePhotoUrl(url)}
                         alt={`Photo ${idx + 1}`}
-                        className="rounded-lg object-cover w-full"
+                        className="rounded-lg object-cover w-full h-28"
                       />
                     ))}
                   </div>
